@@ -1,0 +1,103 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>video-chat-room</title>
+</head>
+
+<body style="background:#333;color:#fff;">
+    <div style="text-align:center;font-size:50px;margin-top:50px;">video conference demo</div>
+    <div id="getAppid-div" style="text-align:center;margin-top:150px;">
+        <input id="roomId" type="" style="width:200px;height:35px;" name="" placeholder='请输入房间号'>
+        <button id="join" onclick="join()" style="height:35px;width:70px;border: 1px solid;border-radius: 3px;cursor:pointer" disabled="true">进入</button>
+    </div>
+    <div id="videos" style="margin:0px auto;width:1080px;" hidden="">
+        <div id="local" style="border:1px solid;margin-right:20px;margin-left:20px;width:480px;height:360px;position:relative;float:left;"></div>
+        <div id="remote" style="border:1px solid;margin-right:20px;margin-left:20px;width:480px;height:360px;float:left;" hidden=""></div>
+    </div>
+    <script type="text/javascript" src='./jquery.js'></script>
+    <script type="text/javascript" src='socket.io.js'></script>
+    <script type="text/javascript" src='adapter.js'></script>
+    <script type="text/javascript" src='https://download.agora.io/sdk/release/AgoraRTCSDK-1.8.0.js'></script>
+    <script type="text/javascript" src='https://cdn.wilddog.com/sdk/js/2.5.4/wilddog.js'></script>
+    <script type="text/javascript">
+        var roomIdEl = document.getElementById('roomId');
+        var client = AgoraRTC.createRtcClient();
+        var videosEl = document.getElementById('videos');
+        var loginDiv = document.getElementById('getAppid-div');
+        var localEl = document.getElementById('local');
+        var remoteEl = document.getElementById('remote');
+        var joinBtn = document.getElementById('join');
+        var localStream;
+        var config = {
+            authDomain: "dongkai.wilddog.com"
+        };
+        wilddog.initializeApp(config);
+        var auth = wilddog.auth();
+        auth.onAuthStateChanged(function (user) {
+            if (user === null) {
+                auth.signInAnonymously();
+            } else {
+                client.init('8a85898229e74199bdd861ff4f31c7ce', function() {
+                    console.log("client initialized");
+                }, function(err) {
+                    console.log("client init failed ", err);
+                //error handling
+                });
+                localStream = AgoraRTC.createStream({streamID: user.uid, audio:true, video:true, screen:false});
+                localStream.init(function () {
+                }, function (err) {
+                    console.log('local stream init failed', err);
+                });
+                joinBtn.disabled = false;
+            };
+        });
+        var join = function () {
+            var roomId = roomIdEl.value;
+            client.join(roomId, auth.currentUser.uid, function(uid) {
+                console.log("client" + uid + "joined channel");
+                //create local stream
+                loginDiv.hidden = true;
+                videosEl.hidden = false;
+                publish();
+            }, function(err) {
+                console.log("client join failed ", err);
+                //error handling
+            });
+        };
+        var publish = function () {
+            localStream.play('local');
+            client.publish(localStream, function(err) {
+                console.log("stream published");
+                //……
+            })
+        };
+        client.on('stream-added', function(evt) {
+            var stream = evt.stream;
+            console.log("new stream added ", stream.getId());
+            //subscribe the stream
+            client.subscribe(stream, function(err) {
+                console.log("stream unpublished");
+                //……
+            })
+        });
+        client.on('stream-subscribed', function(evt) {
+            var stream = evt.stream;
+            console.log("new stream subscribed ", stream.getId());
+            var newRemote = remoteEl.cloneNode(true);
+            newRemote.id = stream.getId();
+            newRemote.hidden = false;
+            videosEl.appendChild(newRemote);
+            stream.play(stream.getId());
+        });
+        client.on('peer-leave', function(evt) {
+            var uid = evt.uid;
+            evt.stream.stop();
+            console.log("remote user left ", uid);
+            var removeEl = document.getElementById(uid);
+            videosEl.removeChild(removeEl);
+        });
+    </script>
+</body>
+
+</html>
